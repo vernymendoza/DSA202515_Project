@@ -8,4 +8,4 @@ Integrado por:
 - *David Castiblanco*
 - *Holman Zarta*
 
-## *Nota: Este es el repositorio desarrollado por el equipo, enfocado en la clasificacion única de ocupaciones en Colombia.*
+#### *Nota: Este es el repositorio desarrollado por el equipo, enfocado en la clasificacion única de ocupaciones en Colombia.*
