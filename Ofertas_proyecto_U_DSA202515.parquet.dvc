@@ -1,0 +1,5 @@
+outs:
+- md5: 2903f09f4c9956f3f75838c0a24650d0
+  size: 759803859
+  hash: md5
+  path: Ofertas_proyecto_U_DSA202515.parquet
