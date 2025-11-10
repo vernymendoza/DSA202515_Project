@@ -358,4 +358,5 @@ def recomendar_cuoc_callback(n_clicks, perfil_texto):
 
 
 if __name__ == "__main__":
-    app.run_server(debug=True)
+    app.run(debug=True)   # o app.run(host="0.0.0.0", port=8050, debug=True)
+
