@@ -198,4 +198,5 @@ def recomendar_cuoc(n_clicks, perfil_texto):
 if __name__ == "__main__":
     # Railway pone el puerto en la variable PORT
     port = int(os.environ.get("PORT", 8050))
-    app.run_server(host="0.0.0.0", port=port, debug=False)
+    app.run(host="0.0.0.0", port=port, debug=False)
+
