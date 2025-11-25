@@ -10,6 +10,8 @@ Integrado por:
 
 #### *Nota: Este es el repositorio desarrollado por el equipo, enfocado en la clasificacion única de ocupaciones en Colombia.*
 
+# Manual 1 – Modelo CUOC (Entrenamiento y Serialización)
+
 # Clasificador de Códigos CUOC para Ofertas de Empleo  
 Herramienta de recomendación de códigos CUOC a partir de descripciones textuales
 
@@ -56,7 +58,8 @@ Estructura principal del repositorio:
 ├── requirements.txt                     # Dependencias del proyecto
 ├── Procfile                             # Start command para Railway
 └── README.md                            # Documentación general del proyecto
-La estructura puede incluir archivos adicionales (.dvc, imágenes, etc.), pero los anteriores son los componentes centrales del modelo y su despliegue.
+```
+- La estructura puede incluir archivos adicionales (.dvc, imágenes, etc.), pero los anteriores son los componentes centrales del modelo y su despliegue.
 
 ---
 
