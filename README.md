@@ -106,7 +106,7 @@ En el modelo se usa principalmente para:
 Función utilizada (a nivel conceptual):
 
 - Recibe el texto.
-- Lo pasa a minúsculas.
+- Lo convierte a minúsculas.
 - Separa en palabras por espacios.
 - Aplica lematización verbo a verbo.
 
