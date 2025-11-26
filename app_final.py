@@ -1,20 +1,20 @@
 import os
+from collections import Counter
 
 import dash
 from dash import html, dcc, Input, Output, State
 import dash_bootstrap_components as dbc
 import plotly.graph_objs as go
+import plotly.express as px
 import numpy as np
 import pandas as pd
-import plotly.express as px  # (por si luego quieres usarlo)
 
 # ------------------ NLP / MODELO ------------------
 import nltk
 from nltk.stem import WordNetLemmatizer
 import joblib
-from sklearn.feature_extraction.text import CountVectorizer
 
-# Descargar wordnet (si ya está, no pasa nada)
+# Solo necesitamos wordnet para el lematizador
 nltk.download("wordnet")
 
 wordnet_lemmatizer = WordNetLemmatizer()
@@ -26,79 +26,72 @@ def split_into_lemmas(text):
     return [wordnet_lemmatizer.lemmatize(word, pos="v") for word in words]
 
 
-# Ruta del modelo (pipeline CountVectorizer + RandomForest)
+# Modelo compacto (pipeline CountVectorizer + RandomForest)
 MODELO_PATH = "modelo_cuoc_rf_compacto.pkl"
 modelo = joblib.load(MODELO_PATH)
 
-# ------------------ CATÁLOGO CUOC ------------------
+# ------------------ CARGA CATÁLOGO CUOC  ------------------
+# Ajusta el header si en tu archivo es distinto; este funciona con el que me mostraste
+df_cuoc = pd.read_excel("PerfilesOcupacionales-Excel-CUOC-2025.xlsx", header=3)
 
-CUOC_FILE = "PerfilesOcupacionales-Excel-CUOC-2025.xlsx"
+df_cuoc = df_cuoc.rename(
+    columns={
+        "Código del Gran Grupo": "gran_grupo",
+        "Código de la Ocupación": "CUOC",
+        "Nombre de la Ocupación": "nombre_ocupacion",
+        "Descripción de la Ocupación": "descripcion_ocupacion",
+    }
+)
 
-try:
-    df_cuoc = pd.read_excel(CUOC_FILE)
+df_cuoc = df_cuoc[df_cuoc["CUOC"].notna()]
+df_cuoc["CUOC"] = df_cuoc["CUOC"].astype(int).astype(str).str.zfill(5)
 
-    # La fila 0 tiene los nombres reales de las columnas
-    df_cuoc.columns = df_cuoc.iloc[0]  # fila 0 -> nombres de columnas
-    df_cuoc = df_cuoc[1:]  # quitar esa fila de los datos
+CUOC_DESCRIPCIONES = dict(
+    zip(df_cuoc["CUOC"], df_cuoc["descripcion_ocupacion"])
+)
+CUOC_NOMBRES = dict(zip(df_cuoc["CUOC"], df_cuoc["nombre_ocupacion"]))
 
-    # Renombrar a algo más manejable
-    df_cuoc = df_cuoc.rename(
-        columns={
-            "Código del Gran Grupo": "GRAN_GRUPO",
-            "Código de la Ocupación": "CUOC",
-            "Nombre de la Ocupación": "NOMBRE",
-            "Descripción de la Ocupación": "DESCRIPCION",
-        }
-    )
+# ------------------ STOPWORDS BÁSICAS (para gráfico de palabras) ------------------
+STOPWORDS_ES = {
+    "de",
+    "la",
+    "el",
+    "y",
+    "en",
+    "para",
+    "los",
+    "las",
+    "del",
+    "con",
+    "por",
+    "un",
+    "una",
+    "se",
+    "que",
+    "al",
+    "su",
+    "sus",
+    "a",
+    "o",
+    "u",
+    "como",
+    "sobre",
+    "entre",
+    "más",
+    "menos",
+    "etc",
+}
 
-    # Normalizar códigos y descripciones
-    df_cuoc["CUOC"] = df_cuoc["CUOC"].astype(str).str.strip()
-    df_cuoc["DESCRIPCION"] = df_cuoc["DESCRIPCION"].fillna("")
 
-    CUOC_DESCRIPCIONES = df_cuoc.set_index("CUOC")["DESCRIPCION"].to_dict()
-
-    print("Diccionario CUOC cargado. Registros:", len(CUOC_DESCRIPCIONES))
-    print("Ejemplo claves:", list(CUOC_DESCRIPCIONES.keys())[:10])
-
-except Exception as e:
-    print("Error cargando catálogo CUOC:", e)
-    CUOC_DESCRIPCIONES = {}
-
-
-# ------------------ FUNCIÓN AUXILIAR ------------------
-
-
-def obtener_recomendaciones_y_palabras(perfil_texto, top_k=5, top_words=10):
-    """
-    Ejecuta el modelo y devuelve:
-      - top_cuoc: códigos CUOC recomendados
-      - top_probs: probabilidades correspondientes
-      - df_palabras: dataframe con palabras clave y su frecuencia
-    """
-    texto = [perfil_texto]
-
-    # Probabilidades del modelo
-    proba = modelo.predict_proba(texto)[0]
-    clases = modelo.classes_
-
-    top_k = min(top_k, len(clases))
-    top_idx = np.argsort(proba)[::-1][:top_k]
-    top_cuoc = clases[top_idx]
-    top_probs = proba[top_idx]
-
-    # Palabras clave del texto (solo para visualización)
-    vec = CountVectorizer(analyzer=split_into_lemmas, max_features=top_words)
-    matriz = vec.fit_transform(texto)
-    frec = matriz.toarray()[0]
-    vocab = vec.get_feature_names_out()
-
-    df_palabras = (
-        pd.DataFrame({"palabra": vocab, "frecuencia": frec})
-        .sort_values("frecuencia", ascending=False)
-        .reset_index(drop=True)
-    )
-
-    return top_cuoc, top_probs, df_palabras
+def limpiar_texto_simple(texto: str) -> list[str]:
+    """Tokenizador muy simple para el gráfico de palabras."""
+    texto = texto.lower()
+    for ch in ",.;:()[]¿?¡!\"'/%-_\n\t\r":
+        texto = texto.replace(ch, " ")
+    tokens = [
+        t for t in texto.split() if len(t) > 3 and t not in STOPWORDS_ES
+    ]
+    return tokens
 
 
 # ------------------ APP DASH ------------------
@@ -136,7 +129,7 @@ app.layout = dbc.Container(
             className="align-items-center my-3",
         ),
         html.Hr(),
-        # SECCIÓN PRINCIPAL
+        # SECCIÓN PRINCIPAL (texto + tabla)
         dbc.Row(
             [
                 # Zona izquierda: entrada del perfil
@@ -164,7 +157,7 @@ app.layout = dbc.Container(
                     ],
                     width=6,
                 ),
-                # Zona derecha: tabla de resultados + gráficos
+                # Zona derecha: tabla de resultados
                 dbc.Col(
                     [
                         html.H5("Códigos CUOC más relevantes:"),
@@ -177,15 +170,24 @@ app.layout = dbc.Container(
                                 "minHeight": "250px",
                             },
                         ),
-                        html.Br(),
-                        dcc.Graph(
-                            id="grafico-prob", style={"height": "260px"}
-                        ),
-                        html.Br(),
-                        dcc.Graph(
-                            id="grafico-palabras", style={"height": "260px"}
-                        ),
                     ],
+                    width=6,
+                ),
+            ],
+            className="my-4",
+        ),
+        # FILA DE GRÁFICOS
+        dbc.Row(
+            [
+                dbc.Col(
+                    dcc.Graph(
+                        id="grafico-probabilidades",
+                        figure=go.Figure(),
+                    ),
+                    width=6,
+                ),
+                dbc.Col(
+                    dcc.Graph(id="grafico-palabras", figure=go.Figure()),
                     width=6,
                 ),
             ],
@@ -202,15 +204,14 @@ app.layout = dbc.Container(
                             className="text-center mb-3",
                         ),
                         html.P(
-                            "Esta herramienta utiliza técnicas de Procesamiento "
-                            "de Lenguaje Natural (NLP) para comparar el perfil "
-                            "ingresado por el prestador o empleador con las "
-                            "descripciones ocupacionales oficiales de la "
-                            "Clasificación Única de Ocupaciones para Colombia "
-                            "(CUOC). A partir de esta comparación semántica, se "
-                            "presentan los cinco códigos más alineados con las "
-                            "competencias, funciones y requisitos del cargo "
-                            "descrito.",
+                            "Esta herramienta utiliza técnicas de Procesamiento de "
+                            "Lenguaje Natural (NLP) para comparar el perfil ingresado "
+                            "por el prestador o empleador con las descripciones "
+                            "ocupacionales oficiales de la Clasificación Única de "
+                            "Ocupaciones para Colombia (CUOC). A partir de esta "
+                            "comparación semántica, se presentan los cinco códigos "
+                            "más alineados con las competencias, funciones y "
+                            "requisitos del cargo descrito.",
                             className="text-justify",
                         ),
                     ]
@@ -223,38 +224,136 @@ app.layout = dbc.Container(
 )
 
 
-# ------------------ CALLBACKS ------------------
+# ------------------ HELPERS PARA GRÁFICOS ------------------
+def figura_vacia(titulo: str) -> go.Figure:
+    fig = go.Figure()
+    fig.update_layout(
+        title=titulo,
+        xaxis_visible=False,
+        yaxis_visible=False,
+        annotations=[
+            dict(
+                text="Sin datos disponibles",
+                showarrow=False,
+                xref="paper",
+                yref="paper",
+                x=0.5,
+                y=0.5,
+                font=dict(size=14),
+            )
+        ],
+        margin=dict(l=20, r=20, t=60, b=20),
+    )
+    return fig
 
 
+def crear_figura_probabilidades(top_cuoc, top_probs):
+    if len(top_cuoc) == 0:
+        return figura_vacia("Top 5 códigos CUOC (probabilidad del modelo)")
+
+    codigos = [str(c) for c in top_cuoc]
+    nombres = [CUOC_NOMBRES.get(c, "") for c in codigos]
+
+    df_plot = pd.DataFrame(
+        {
+            "Código CUOC": codigos,
+            "Probabilidad": top_probs,
+            "Ocupación": nombres,
+        }
+    )
+
+    fig = px.bar(
+        df_plot,
+        x="Código CUOC",
+        y="Probabilidad",
+        hover_data=["Ocupación"],
+        text="Probabilidad",
+    )
+    fig.update_traces(texttemplate="%{text:.3f}", textposition="outside")
+    fig.update_layout(
+        title="Top 5 códigos CUOC (probabilidad del modelo)",
+        yaxis=dict(range=[0, float(max(top_probs) * 1.2)]),
+        margin=dict(l=40, r=20, t=60, b=40),
+    )
+    return fig
+
+
+def crear_figura_palabras(perfil_texto: str, descripciones_top: list[str]):
+    texto_total = (perfil_texto or "") + " " + " ".join(descripciones_top)
+    tokens = limpiar_texto_simple(texto_total)
+
+    if not tokens:
+        return figura_vacia(
+            "Palabras clave (perfil + ocupaciones recomendadas)"
+        )
+
+    conteo = Counter(tokens)
+    palabras, frec = zip(*conteo.most_common(10))
+
+    fig = px.bar(
+        x=list(palabras),
+        y=list(frec),
+    )
+    fig.update_layout(
+        title="Palabras clave (perfil + ocupaciones recomendadas)",
+        xaxis_title="Palabra",
+        yaxis_title="Frecuencia",
+        margin=dict(l=40, r=20, t=80, b=80),
+    )
+    return fig
+
+
+# ------------------ CALLBACK PRINCIPAL ------------------
 @app.callback(
     Output("resultados", "children"),
+    Output("grafico-probabilidades", "figure"),
+    Output("grafico-palabras", "figure"),
     Input("boton-buscar", "n_clicks"),
     State("perfil-texto", "value"),
 )
 def recomendar_cuoc(n_clicks, perfil_texto):
     # Antes de dar clic o si está vacío
     if not n_clicks:
-        return "Ingrese un perfil para obtener recomendaciones."
-    if not perfil_texto or not perfil_texto.strip():
-        return "El texto del perfil está vacío. Por favor ingréselo para obtener recomendaciones."
-
-    try:
-        top_cuoc, top_probs, _ = obtener_recomendaciones_y_palabras(
-            perfil_texto
+        return (
+            "Ingrese un perfil para obtener recomendaciones.",
+            figura_vacia("Top 5 códigos CUOC (probabilidad del modelo)"),
+            figura_vacia(
+                "Palabras clave (perfil + ocupaciones recomendadas)"
+            ),
         )
 
-        filas = []
-        for cod, p in zip(top_cuoc, top_probs):
-            cod_str = str(cod).strip()
-            # Si viene como '43110.0' → '43110'
-            if cod_str.endswith(".0"):
-                cod_str = cod_str[:-2]
+    if not perfil_texto or not perfil_texto.strip():
+        return (
+            "El texto del perfil está vacío. Por favor ingréselo para obtener recomendaciones.",
+            figura_vacia("Top 5 códigos CUOC (probabilidad del modelo)"),
+            figura_vacia(
+                "Palabras clave (perfil + ocupaciones recomendadas)"
+            ),
+        )
 
+    try:
+        texto = [perfil_texto]
+
+        # Vector de probabilidades para cada clase CUOC
+        proba = modelo.predict_proba(texto)[0]
+        clases = modelo.classes_
+
+        # Top 5 clases
+        top_k = 5 if len(clases) >= 5 else len(clases)
+        top_idx = np.argsort(proba)[::-1][:top_k]
+        top_cuoc = clases[top_idx]
+        top_probs = proba[top_idx]
+
+        # ----- TABLA -----
+        filas = []
+        descripciones_top = []
+        for cod, p in zip(top_cuoc, top_probs):
+            cod_str = str(cod)
             desc = CUOC_DESCRIPCIONES.get(
                 cod_str,
-                "Descripción no disponible en el catálogo cargado. Consulte el catálogo oficial CUOC.",
+                "Descripción no disponible en esta versión. Consulte el catálogo oficial CUOC.",
             )
-
+            descripciones_top.append(desc)
             filas.append(
                 html.Tr(
                     [
@@ -274,7 +373,6 @@ def recomendar_cuoc(n_clicks, perfil_texto):
                 ]
             )
         )
-
         body = html.Tbody(filas)
 
         tabla = html.Table(
@@ -286,87 +384,35 @@ def recomendar_cuoc(n_clicks, perfil_texto):
             },
         )
 
-        return tabla
+        # ----- GRÁFICOS -----
+        fig_probs = crear_figura_probabilidades(top_cuoc, top_probs)
+        fig_palabras = crear_figura_palabras(perfil_texto, descripciones_top)
+
+        return tabla, fig_probs, fig_palabras
 
     except Exception as e:
-        return html.Div(
-            [
-                html.P(
-                    "Ocurrió un error al generar las recomendaciones."
-                ),
-                html.Pre(
-                    str(e),
-                    style={
-                        "whiteSpace": "pre-wrap",
-                        "fontSize": "12px",
-                    },
-                ),
-            ]
+        # En caso de error mostramos el mensaje y dejamos figuras vacías
+        return (
+            html.Div(
+                [
+                    html.P(
+                        "Ocurrió un error al generar las recomendaciones."
+                    ),
+                    html.Pre(
+                        str(e),
+                        style={
+                            "whiteSpace": "pre-wrap",
+                            "fontSize": "12px",
+                        },
+                    ),
+                ]
+            ),
+            figura_vacia("Top 5 códigos CUOC (probabilidad del modelo)"),
+            figura_vacia(
+                "Palabras clave (perfil + ocupaciones recomendadas)"
+            ),
         )
 
-
-@app.callback(
-    [
-        Output("grafico-prob", "figure"),
-        Output("grafico-palabras", "figure"),
-    ],
-    Input("boton-buscar", "n_clicks"),
-    State("perfil-texto", "value"),
-)
-def actualizar_graficos(n_clicks, perfil_texto):
-    # Si no hay clic o no hay texto, devolvemos figuras vacías
-    if not n_clicks or not perfil_texto or not perfil_texto.strip():
-        return go.Figure(), go.Figure()
-
-    try:
-        top_cuoc, top_probs, df_palabras = (
-            obtener_recomendaciones_y_palabras(perfil_texto)
-        )
-
-        # Gráfico 1: ranking de CUOC por probabilidad
-        codigos_str = []
-        for c in top_cuoc:
-            s = str(c).strip()
-            if s.endswith(".0"):
-                s = s[:-2]
-            codigos_str.append(s)
-
-        fig_prob = go.Figure(
-            data=[go.Bar(x=codigos_str, y=top_probs)]
-        )
-        fig_prob.update_layout(
-            title="Probabilidad por código CUOC recomendado",
-            xaxis_title="Código CUOC",
-            yaxis_title="Probabilidad",
-            yaxis=dict(range=[0, 1]),
-        )
-
-        # Gráfico 2: palabras clave del perfil
-        fig_pal = go.Figure(
-            data=[
-                go.Bar(
-                    x=df_palabras["palabra"],
-                    y=df_palabras["frecuencia"],
-                )
-            ]
-        )
-        fig_pal.update_layout(
-            title="Palabras clave detectadas en el perfil",
-            xaxis_title="Palabra",
-            yaxis_title="Frecuencia",
-        )
-
-        return fig_prob, fig_pal
-
-    except Exception as e:
-        fig_err = go.Figure()
-        fig_err.update_layout(
-            title=f"Error generando gráficos: {e}"
-        )
-        return fig_err, go.Figure()
-
-
-# ------------------ MAIN ------------------
 
 if __name__ == "__main__":
     # Railway pone el puerto en la variable PORT
