@@ -313,30 +313,15 @@ def crear_figura_palabras(perfil_texto: str, descripciones_top: list[str]):
 # ------------------ CALLBACK PRINCIPAL ------------------
 @app.callback(
     Output("resultados", "children"),
-    Output("grafico-probabilidades", "figure"),
-    Output("grafico-palabras", "figure"),
     Input("boton-buscar", "n_clicks"),
-    State("perfil-texto", "value"),
+    State("perfil-texto", "value")
 )
 def recomendar_cuoc(n_clicks, perfil_texto):
     # Antes de dar clic o si está vacío
     if not n_clicks:
-        return (
-            "Ingrese un perfil para obtener recomendaciones.",
-            figura_vacia("Top 5 códigos CUOC (probabilidad del modelo)"),
-            figura_vacia(
-                "Palabras clave (perfil + ocupaciones recomendadas)"
-            ),
-        )
-
+        return "Ingrese un perfil para obtener recomendaciones."
     if not perfil_texto or not perfil_texto.strip():
-        return (
-            "El texto del perfil está vacío. Por favor ingréselo para obtener recomendaciones.",
-            figura_vacia("Top 5 códigos CUOC (probabilidad del modelo)"),
-            figura_vacia(
-                "Palabras clave (perfil + ocupaciones recomendadas)"
-            ),
-        )
+        return "El texto del perfil está vacío. Por favor ingréselo para obtener recomendaciones."
 
     try:
         texto = [perfil_texto]
@@ -351,35 +336,36 @@ def recomendar_cuoc(n_clicks, perfil_texto):
         top_cuoc = clases[top_idx]
         top_probs = proba[top_idx]
 
-        # ----- TABLA -----
+        # Nombres bonitos para el gráfico (usamos nombre de ocupación)
+        top_labels = [
+            CUOC_NOMBRES.get(str(cod), f"CUOC {cod}")
+            for cod in top_cuoc
+        ]
+
+        # ---------------- TABLA DE RESULTADOS ----------------
         filas = []
-        descripciones_top = []
         for cod, p in zip(top_cuoc, top_probs):
             cod_str = str(cod)
             desc = CUOC_DESCRIPCIONES.get(
                 cod_str,
-                "Descripción no disponible en esta versión. Consulte el catálogo oficial CUOC.",
+                "Descripción no disponible en esta versión. Consulte el catálogo oficial CUOC."
             )
-            descripciones_top.append(desc)
             filas.append(
-                html.Tr(
-                    [
-                        html.Td(cod_str),
-                        html.Td(desc),
-                        html.Td(f"{p:.4f}"),
-                    ]
-                )
+                html.Tr([
+                    html.Td(cod_str),
+                    html.Td(desc),
+                    html.Td(f"{p:.4f}")
+                ])
             )
 
         header = html.Thead(
-            html.Tr(
-                [
-                    html.Th("Código CUOC"),
-                    html.Th("Descripción"),
-                    html.Th("Probabilidad"),
-                ]
-            )
+            html.Tr([
+                html.Th("Código CUOC"),
+                html.Th("Descripción"),
+                html.Th("Probabilidad")
+            ])
         )
+
         body = html.Tbody(filas)
 
         tabla = html.Table(
@@ -387,38 +373,103 @@ def recomendar_cuoc(n_clicks, perfil_texto):
             style={
                 "width": "100%",
                 "borderCollapse": "collapse",
-                "marginTop": "10px",
-            },
+                "marginTop": "10px"
+            }
         )
 
-        # ----- GRÁFICOS -----
-        fig_probs = crear_figura_probabilidades(top_cuoc, top_probs)
-        fig_palabras = crear_figura_palabras(perfil_texto, descripciones_top)
+        # ---------------- GRÁFICO TOP 5 ----------------
+        fig_top5 = go.Figure(
+            data=[
+                go.Bar(
+                    x=top_labels,
+                    y=top_probs,
+                    text=[f"{p:.4f}" for p in top_probs],
+                    textposition="auto",
+                    customdata=np.array(top_cuoc).reshape(-1, 1),
+                    hovertemplate=(
+                        "<b>CUOC %{customdata[0]}</b><br>"
+                        "%{x}<br>"
+                        "Probabilidad: %{y:.4f}<extra></extra>"
+                    ),
+                )
+            ]
+        )
 
-        return tabla, fig_probs, fig_palabras
+        fig_top5.update_layout(
+            title="<b>Top 5 ocupaciones CUOC (probabilidad del modelo)</b>",
+            xaxis_title="<b>Ocupación CUOC</b>",
+            yaxis_title="<b>Probabilidad</b>",
+            xaxis=dict(tickangle=-20),
+            margin=dict(l=40, r=20, t=60, b=80),
+            height=350,
+        )
+
+        # ---------------- GRÁFICO PALABRAS CLAVE ----------------
+        # Texto combinado: perfil + descripciones de las ocupaciones recomendadas
+        textos_union = perfil_texto + " "
+        for cod in top_cuoc:
+            cod_str = str(cod)
+            textos_union += " " + CUOC_DESCRIPCIONES.get(cod_str, "")
+
+        tokens = [
+            w for w in split_into_lemmas(textos_union)
+            if len(w) > 3  # palabras de al menos 4 letras
+        ]
+        conteo = Counter(tokens).most_common(10)
+        if conteo:
+            palabras, frecuencias = zip(*conteo)
+        else:
+            palabras, frecuencias = [], []
+
+        fig_palabras = go.Figure(
+            data=[
+                go.Bar(
+                    x=list(palabras),
+                    y=list(frecuencias),
+                    text=list(frecuencias),
+                    textposition="auto",
+                    hovertemplate="Palabra: %{x}<br>Frecuencia: %{y}<extra></extra>",
+                )
+            ]
+        )
+
+        fig_palabras.update_layout(
+            title="<b>Palabras clave (perfil + ocupaciones recomendadas)</b>",
+            xaxis_title="<b>Palabra</b>",
+            yaxis_title="<b>Frecuencia</b>",
+            xaxis=dict(tickangle=-30),
+            margin=dict(l=40, r=20, t=60, b=80),
+            height=350,
+        )
+
+        # ---------------- COMPONEMOS RESULTADO ----------------
+        graficos = dbc.Row(
+            [
+                dbc.Col(
+                    dcc.Graph(
+                        figure=fig_top5,
+                        config={"displayModeBar": False}
+                    ),
+                    width=6
+                ),
+                dbc.Col(
+                    dcc.Graph(
+                        figure=fig_palabras,
+                        config={"displayModeBar": False}
+                    ),
+                    width=6
+                ),
+            ],
+            className="mt-4"
+        )
+
+        return html.Div([tabla, graficos])
 
     except Exception as e:
-        # En caso de error mostramos el mensaje y dejamos figuras vacías
-        return (
-            html.Div(
-                [
-                    html.P(
-                        "Ocurrió un error al generar las recomendaciones."
-                    ),
-                    html.Pre(
-                        str(e),
-                        style={
-                            "whiteSpace": "pre-wrap",
-                            "fontSize": "12px",
-                        },
-                    ),
-                ]
-            ),
-            figura_vacia("Top 5 códigos CUOC (probabilidad del modelo)"),
-            figura_vacia(
-                "Palabras clave (perfil + ocupaciones recomendadas)"
-            ),
-        )
+        return html.Div([
+            html.P("Ocurrió un error al generar las recomendaciones."),
+            html.Pre(str(e), style={"whiteSpace": "pre-wrap", "fontSize": "12px"})
+        ])
 
 
 if __name__ == "__main__":
