@@ -7,13 +7,11 @@ Proyecto MLOps – Grupo 28
 
 ## 📋 Descripción
 
-Este manual documenta el proceso para **desplegar en producción** el dashboard de recomendación de códigos CUOC (`app_final.py`) utilizando la plataforma **Railway**.
-
-Objetivos:
-
-- Replicar el despliegue desde el repositorio de GitHub.
-- Entender cómo Railway construye la imagen y arranca el servicio.
-- Saber dónde revisar logs y cómo diagnosticar errores.
+Este manual describe de forma detallada el proceso para desplegar en producción el dashboard de recomendación de códigos CUOC (archivo app_final.py) utilizando la plataforma Railway.
+El objetivo es dejar documentado el procedimiento completo para que cualquiera pueda:
+•	Replicar el despliegue directamente desde el repositorio en GitHub.
+•	Comprender cómo Railway construye la imagen, instala dependencias y ejecuta el servicio.
+•	Saber dónde consultar logs y cómo diagnosticar errores durante el build y la ejecución.
 
 ---
 
