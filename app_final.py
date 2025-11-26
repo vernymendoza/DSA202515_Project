@@ -7,17 +7,33 @@ import dash_bootstrap_components as dbc
 import plotly.express as px
 import numpy as np
 import pandas as pd
+import joblib
+
+# ===== NUEVO: NLTK + split_into_lemmas (para que el modelo pueda deserializar) =====
+import nltk
+from nltk.stem import WordNetLemmatizer
+
+# Descargar wordnet (si ya está, no pasa nada)
+nltk.download("wordnet")
+
+wordnet_lemmatizer = WordNetLemmatizer()
+
+def split_into_lemmas(text):
+    """
+    MISMA FIRMA que la usada al entrenar el modelo.
+    El pipeline pickled solo necesita que exista una función con este nombre.
+    """
+    text = str(text).lower()
+    words = text.split()
+    return [wordnet_lemmatizer.lemmatize(word, pos="v") for word in words]
 
 # ============================================================
 # 1. MODELO Y CATÁLOGO CUOC
 # ============================================================
 
-import joblib
-
 # Ruta del modelo compacto (pipeline CountVectorizer + RandomForest)
 MODELO_PATH = "modelo_cuoc_rf_compacto.pkl"
 modelo = joblib.load(MODELO_PATH)
-
 # ------------------ CARGA CATÁLOGO CUOC ------------------
 # Leemos empezando en la fila 4 (índice 3), donde están los encabezados
 df_cuoc = pd.read_excel(
