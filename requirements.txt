@@ -6,3 +6,4 @@ pandas
 nltk
 joblib
 scikit-learn
+openpyxl
