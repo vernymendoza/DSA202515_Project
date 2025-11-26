@@ -18,14 +18,12 @@ nltk.download("wordnet")
 
 wordnet_lemmatizer = WordNetLemmatizer()
 
+
 def split_into_lemmas(text):
-    """
-    MISMA FIRMA que la usada al entrenar el modelo.
-    El pipeline pickled solo necesita que exista una función con este nombre.
-    """
     text = str(text).lower()
     words = text.split()
-    return [wordnet_lemmatizer.lemmatize(word, pos="v") for word in words]
+    return [wordnet_lemmatizer.lemmatize(word, pos='v') for word in words]
+
 
 # ============================================================
 # 1. MODELO Y CATÁLOGO CUOC
