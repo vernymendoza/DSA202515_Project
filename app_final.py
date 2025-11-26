@@ -32,17 +32,23 @@ modelo = joblib.load(MODELO_PATH)
 
 # ------------------ CARGA CATÁLOGO CUOC  ------------------
 # Ajusta el header si en tu archivo es distinto; este funciona con el que me mostraste
-df_cuoc = pd.read_excel("PerfilesOcupacionales-Excel-CUOC-2025.xlsx", header=3)
-
-df_cuoc = df_cuoc.rename(
-    columns={
-        "Código del Gran Grupo": "gran_grupo",
-        "Código de la Ocupación": "CUOC",
-        "Nombre de la Ocupación": "nombre_ocupacion",
-        "Descripción de la Ocupación": "descripcion_ocupacion",
-    }
+# ------------------ CARGA CATÁLOGO CUOC  ------------------
+# Leemos empezando en la fila 4 (índice 3), donde están los encabezados de datos
+df_cuoc = pd.read_excel(
+    "PerfilesOcupacionales-Excel-CUOC-2025.xlsx", header=3
 )
 
+# Nos quedamos solo con las primeras 4 columnas y las renombramos por posición,
+# para no depender de los nombres originales exactos del archivo.
+df_cuoc = df_cuoc.iloc[:, :4]
+df_cuoc.columns = [
+    "gran_grupo",
+    "CUOC",
+    "nombre_ocupacion",
+    "descripcion_ocupacion",
+]
+
+# Limpieza básica
 df_cuoc = df_cuoc[df_cuoc["CUOC"].notna()]
 df_cuoc["CUOC"] = df_cuoc["CUOC"].astype(int).astype(str).str.zfill(5)
 
@@ -50,6 +56,7 @@ CUOC_DESCRIPCIONES = dict(
     zip(df_cuoc["CUOC"], df_cuoc["descripcion_ocupacion"])
 )
 CUOC_NOMBRES = dict(zip(df_cuoc["CUOC"], df_cuoc["nombre_ocupacion"]))
+
 
 # ------------------ STOPWORDS BÁSICAS (para gráfico de palabras) ------------------
 STOPWORDS_ES = {
